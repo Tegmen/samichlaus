@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Der Weg des Samichlaus</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+        }
+        h1 {
+            color: #d62828;
+            text-align: center;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            display: block;
+            margin: 20px auto;
+            max-width: 100%;
+        }
+        #feedback {
+            font-weight: bold;
+            margin-top: 10px;
+            text-align: center;
+        }
+        #path-length {
+            font-weight: bold;
+            margin-top: 10px;
+            min-height: 1.5em;
+            text-align: center;
+        }
+        button {
+            margin-left: 10px;
+            padding: 10px 15px;
+            background-color: #0073e6;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        button:hover:enabled {
+            background-color: #005bb5;
+        }
+        #record {
+            margin-top: 20px;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: darkgreen;
+            text-align: center;
+        }
+        input {
+            padding: 10px;
+            font-size: 1em;
+            width: calc(100% - 20px);
+        }
+        #controls {
+            text-align: center;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Der Weg des Samichlaus</h1>
+    <p>Der Samichlaus braucht eure Hilfe, um den kürzesten Weg zwischen seinen Häusern zu finden!</p>
+    <div id="controls">
+        <input type="text" id="pathInput" placeholder="Pfad eingeben..." maxlength="10" />
+        <button id="randomPath">Zufälliger Weg</button>
+    </div>
+    <div id="path-length">Länge:</div>
+    <canvas id="mapCanvas" width="400" height="400"></canvas>
+    <div id="feedback"></div>
+    <div id="record" style="display: none;"></div>
+
+    <script>
+        const coordinates = {
+            A: { x: 0, y: 0 },
+            B: { x: 10, y: 10 },
+            C: { x: 2, y: 9 },
+            D: { x: 4, y: 1 },
+            E: { x: 1, y: 3 },
+            F: { x: 8, y: 2 },
+            G: { x: 10, y: 1 },
+            H: { x: 3, y: 6 },
+            I: { x: 5, y: 4 },
+            K: { x: 7, y: 7 }
+        };
+        const points = Object.keys(coordinates);
+
+        const pathInput = document.getElementById("pathInput");
+        const randomPathButton = document.getElementById("randomPath");
+        const feedback = document.getElementById("feedback");
+        const pathLength = document.getElementById("path-length");
+        const canvas = document.getElementById("mapCanvas");
+        const recordDisplay = document.getElementById("record");
+        const ctx = canvas.getContext("2d");
+
+        let personalRecord = Infinity;
+        let personalRecordPath = "";
+
+        const scale = 35;
+        const offsetX = 20;
+        const offsetY = 20;
+
+        const houseImg = new Image();
+        houseImg.src = "img/haus.png";
+        const samichlausImg = new Image();
+        samichlausImg.src = "img/chlaus.png";
+
+        function generateRandomPath() {
+            randomPathButton.disabled = true;
+            const shuffled = points.sort(() => Math.random() - 0.5).join("");
+            pathInput.value = shuffled;
+            updateDisplay();
+            setTimeout(() => {
+                randomPathButton.disabled = false;
+            }, 3000);
+        }
+
+        function drawMap(path) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Zeichne Häuser
+            for (const [point, coord] of Object.entries(coordinates)) {
+                const x = coord.x * scale + offsetX - 16;
+                const y = canvas.height - (coord.y * scale + offsetY) - 16;
+                ctx.drawImage(houseImg, x, y, 32, 32);
+
+                // Zeichne Buchstaben
+                ctx.font = "14px Arial";
+                ctx.fillStyle = "black";
+                ctx.textAlign = "center";
+                ctx.fillText(point, coord.x * scale + offsetX, canvas.height - (coord.y * scale + offsetY) - 20);
+            }
+
+            // Zeichne Samichlaus
+            if (path.length > 0) {
+                const lastPoint = path[path.length - 1];
+                const { x, y } = coordinates[lastPoint];
+                const posX = x * scale + offsetX - 16;
+                const posY = canvas.height - (y * scale + offsetY) - 16;
+                ctx.drawImage(samichlausImg, posX, posY, 32, 32);
+            }
+        }
+
+        function drawPath(path, isComplete) {
+            if (path.length < 2) return;
+
+            ctx.beginPath();
+            for (let i = 0; i < path.length - 1; i++) {
+                const start = coordinates[path[i]];
+                const end = coordinates[path[i + 1]];
+                const startX = start.x * scale + offsetX;
+                const startY = canvas.height - (start.y * scale + offsetY);
+                const endX = end.x * scale + offsetX;
+                const endY = canvas.height - (end.y * scale + offsetY);
+
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+            }
+            ctx.strokeStyle = isComplete ? "green" : "blue";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function calculateDistance(p1, p2) {
+            const dx = coordinates[p1].x - coordinates[p2].x;
+            const dy = coordinates[p1].y - coordinates[p2].y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function updateDisplay() {
+            const path = pathInput.value.toUpperCase();
+            const visited = path.split("");
+            const invalidChars = visited.filter(ch => !points.includes(ch));
+            const duplicates = visited.filter((ch, i) => visited.indexOf(ch) !== i);
+
+            if (invalidChars.length > 0) {
+                feedback.textContent = `Ungültige Eingabe: ${invalidChars.join(", ")}`;
+                feedback.style.color = "red";
+                pathLength.textContent = "";
+                drawMap([]);
+                return;
+            }
+
+            if (duplicates.length > 0) {
+                feedback.textContent = `Ungültig: Buchstabe mehrmals verwendet (${duplicates.join(", ")})`;
+                feedback.style.color = "red";
+                pathLength.textContent = "";
+                drawMap([]);
+                return;
+            }
+
+            feedback.textContent = ""; // Feedback ausblenden, wenn gültige Eingabe
+            const remaining = points.filter(point => !visited.includes(point));
+            const isComplete = remaining.length === 0;
+            const length = calculateTotalDistance(visited);
+
+            pathLength.textContent = isComplete
+                ? `Länge: ${length.toFixed(2)}`
+                : `Bisherige Länge: ${length.toFixed(2)} (Noch nicht besucht: ${remaining.join("")})`;
+
+            feedback.style.color = isComplete ? "darkgreen" : "blue";
+
+            if (isComplete && length < personalRecord) {
+                personalRecord = length;
+                personalRecordPath = path;
+                recordDisplay.textContent = `Persönlicher Rekord: ${length.toFixed(2)} (${personalRecordPath})`;
+                recordDisplay.style.display = "block";
+            }
+
+            drawMap(visited);
+            drawPath(visited, isComplete);
+        }
+
+        function calculateTotalDistance(path) {
+            let length = 0;
+            for (let i = 0; i < path.length - 1; i++) {
+                length += calculateDistance(path[i], path[i + 1]);
+            }
+            return length;
+        }
+
+        pathInput.addEventListener("input", updateDisplay);
+        randomPathButton.addEventListener("click", generateRandomPath);
+
+        houseImg.onload = () => {
+            drawMap([]);
+        };
+    </script>
+</body>
+</html>
